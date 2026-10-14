@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Заметки AI</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1222">
+<link rel="icon" href="icon.svg">
+<style>
+:root{--bg:#0f1222;--card:#1a1f3a;--card2:#232948;--txt:#eef0ff;--mut:#9aa3c7;--acc:#7c6cff;--acc2:#00e0b0;--danger:#ff5d7a}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:radial-gradient(1200px 600px at 20% -10%,#2a2f6b 0%,var(--bg) 55%),var(--bg);color:var(--txt);min-height:100vh}
+.app{max-width:560px;margin:0 auto;padding:16px 14px 90px}
+.top{display:flex;align-items:center;gap:12px;padding:10px 2px 14px}
+.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;font-size:24px;flex-shrink:0}
+h1{font-size:20px;margin:0}small{color:var(--mut)}
+.card{background:linear-gradient(180deg,var(--card),#141834);border:1px solid #2d3563;border-radius:18px;padding:14px;margin-bottom:12px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+input,textarea,select{width:100%;background:#0d1030;border:1px solid #30386a;color:var(--txt);border-radius:12px;padding:11px 12px;font-size:15px;outline:none}
+input:focus,textarea:focus{border-color:var(--acc)}
+textarea{min-height:84px;resize:vertical}
+.row{display:flex;gap:8px}.row>*{flex:1}
+button{border:0;border-radius:12px;padding:11px 12px;font-size:15px;font-weight:600;cursor:pointer}
+.btn{background:linear-gradient(135deg,var(--acc),#5a8bff);color:#fff}
+.btn2{background:#262d5a;color:var(--txt);border:1px solid #39418a}
+.btnAI{background:linear-gradient(135deg,#00e0b0,#7c6cff);color:#06131a}
+.btnDanger{background:#2a1530;color:var(--danger);border:1px solid #5a2540}
+.note{margin-top:10px}.note h3{margin:6px 0;font-size:16px}.note p{white-space:pre-wrap;color:#d6dbff;font-size:14px;margin:6px 0}
+.meta{font-size:12px;color:var(--mut);display:flex;justify-content:space-between;gap:8px}
+.ai-bar{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ai-bar button{font-size:13px;padding:8px 10px}
+#aiResult{white-space:pre-wrap;background:#0a0d27;border:1px dashed #4a55a0;border-radius:12px;padding:10px;margin-top:10px;font-size:14px;display:none}
+.loading{opacity:.6;pointer-events:none}
+.keybox{font-size:13px;color:var(--mut)}.keybox a{color:var(--acc2)}
+.fab{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);max-width:560px;width:calc(100% - 28px);display:flex;gap:8px}
+.search{margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="logo">✨</div>
+    <div><h1>Заметки AI</h1><small>красиво • оффлайн • + Gemini</small></div>
+  </div>
+
+  <div class="card keybox">
+    🔑 Gemini API-ключ (хранится только в телефоне):
+    <div class="row" style="margin-top:8px">
+      <input id="apiKey" type="password" placeholder="AIza...">
+      <button class="btn2" id="saveKey" style="max-width:110px">Сохранить</button>
+    </div>
+    <div style="margin-top:6px">Где взять: <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a> → Create API key</div>
+  </div>
+
+  <div class="card">
+    <input id="title" placeholder="Заголовок заметки...">
+    <div style="height:8px"></div>
+    <textarea id="body" placeholder="Текст заметки..."></textarea>
+    <div style="height:8px"></div>
+    <div class="row">
+      <button class="btn" id="add">＋ Добавить</button>
+      <button class="btn2" id="clear">Очистить</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" class="search" placeholder="🔍 Поиск...">
+      <select id="aiAction" style="max-width:170px">
+        <option value="improve">✨ Улучшить текст</option>
+        <option value="summary">📝 Краткий итог</option>
+        <option value="tasks">✅ Сделать задачи</option>
+        <option value="ideas">💡 Идеи-продолжение</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btnAI" id="askAI">Спросить Gemini по всем заметкам</button>
+    </div>
+    <input id="customQ" style="margin-top:8px" placeholder="Свой вопрос к ИИ, напр: составь план дня из заметок">
+    <div id="aiResult"></div>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let notes=JSON.parse(localStorage.getItem('ai-notes')||'[]');
+$('apiKey').value=localStorage.getItem('gemini-key')||'';
+$('saveKey').onclick=()=>{localStorage.setItem('gemini-key',$('apiKey').value.trim());alert('Ключ сохранён');};
+
+function save(){localStorage.setItem('ai-notes',JSON.stringify(notes));render();}
+$('add').onclick=()=>{
+  const t=$('title').value.trim(),b=$('body').value.trim();
+  if(!t&&!b)return alert('Пустую заметку не сохраняю');
+  notes.unshift({id:Date.now(),t:t||'Без заголовка',b,time:new Date().toLocaleString('ru-RU')});
+  $('title').value='';$('body').value='';save();
+};
+$('clear').onclick=()=>{$('title').value='';$('body').value='';};
+$('q').oninput=render;
+
+async function gemini(prompt){
+  const key=localStorage.getItem('gemini-key')||'';
+  if(!key){alert('Сначала вставь Gemini API-ключ сверху');return null;}
+  const box=$('aiResult');box.style.display='block';box.textContent='⏳ Gemini думает...';
+  document.body.classList.add('loading');
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key='+encodeURIComponent(key),{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+    });
+    const j=await r.json();
+    if(j.error)throw new Error(j.error.message);
+    const txt=j.candidates?.[0]?.content?.parts?.[0]?.text||'Пустой ответ';
+    box.textContent=txt;return txt;
+  }catch(e){box.textContent='❌ Ошибка: '+e.message;return null;}
+  finally{document.body.classList.remove('loading');}
+}
+
+$('askAI').onclick=()=>{
+  const all=notes.map(n=>`— ${n.t}: ${n.b}`).join('\n')||'(заметок пока нет)';
+  const mode=$('aiAction').value;
+  const custom=$('customQ').value.trim();
+  let p='';
+  if(custom)p=`Заметки пользователя:\n${all}\n\nВопрос: ${custom}\nОтвечай по-русски, коротко и по делу.`;
+  else if(mode==='improve')p=`Улучши эти заметки, сделай красиво и грамотно, по-русски:\n${all}`;
+  else if(mode==='summary')p=`Сделай краткий итог дня по заметкам, выдели главное, по-русски:\n${all}`;
+  else if(mode==='tasks')p=`Преврати эти заметки в список задач на день с чекбоксами, по-русски:\n${all}`;
+  else p=`Предложи 5 идей-продолжений на основе заметок, по-русски:\n${all}`;
+  gemini(p);
+};
+
+function render(){
+  const q=($('q').value||'').toLowerCase();
+  const list=$('list');list.innerHTML='';
+  notes.filter(n=>(n.t+n.b).toLowerCase().includes(q)).forEach(n=>{
+    const d=document.createElement('div');d.className='card note';
+    d.innerHTML=`<div class="meta"><span>${n.time}</span><span>#${String(n.id).slice(-4)}</span></div><h3></h3><p></p>
+    <div class="ai-bar">
+      <button class="btn2">✨ Улучшить</button>
+      <button class="btn2">📝 Итог</button>
+      <button class="btnDanger">Удалить</button>
+      <button class="btnAI">Вставить ИИ ↓</button>
+    </div>`;
+    d.querySelector('h3').textContent=n.t;
+    d.querySelector('p').textContent=n.b;
+    const[bu,bs,bd,bi]=d.querySelectorAll('button');
+    bu.onclick=async()=>{const t=await gemini(`Улучши заметку, по-русски:\nЗаголовок: ${n.t}\nТекст: ${n.b}`);if(t){n.b=t;save();}};
+    bs.onclick=()=>gemini(`Суммаризируй в 3 пунктах, по-русски:\n${n.t}\n${n.b}`);
+    bd.onclick=()=>{if(confirm('Удалить?')){notes=notes.filter(x=>x.id!==n.id);save();}};
+    bi.onclick=()=>{const r=$('aiResult').textContent;if(r&&!r.startsWith('⏳')&&!r.startsWith('❌')){n.b+='\n\n--- ИИ ---\n'+r;save();}else alert('Сначала спроси Gemini сверху');};
+    list.appendChild(d);
+  });
+  if(!notes.length)list.innerHTML='<div class="card">Пока пусто. Добавь первую заметку выше 👆</div>';
+}
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
